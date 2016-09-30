@@ -9,7 +9,7 @@ then
 	mkdir ${log_bak}
 fi
 
-while [ 1 ]   #放入后台，不断循环执行
+while :   #放入后台，不断循环执行
 do
 	sleep 30s    #设置时间间隔，扫描日志文件
 	timetag=$(date +"%R%S:%D")   #时间戳
