@@ -3,7 +3,9 @@
 #ubuntu下设置crontab的配置文件/etc/crontab
 #通过修改conrtab文件前的#号来控制命令的开启与关闭
 
-job=$(sed -n "/$1/p" test.txt)
+cronfile=/etc/crontab
+
+job=$(sed -n "/$1/p" $cronfile)
 if [  $# -eq 3 ] && [ -n "$job" ]   #判断输入的命令参数是否符合要求(要求命令存在于crontab表中)
 then
     job_num=$(echo "$job" | grep '^#' &>/dev/null && echo 0 || echo 1)
@@ -13,7 +15,7 @@ then
     --start)
         if [ $job_num -eq 0 ]  #判断在/etc/crontab表中的jobname前是否有#号
         then
-            sed -i "/$1/s/^#//g" test.txt
+            sed -i "/$1/s/^#//g" $cronfile
             echo "$1 is started!"
         else
             echo "$1 is already started!"
@@ -23,7 +25,7 @@ then
         then
             echo "$1 job is already stopped!"
         else
-            sed -i "/$1/s/^/#/" test.txt
+            sed -i "/$1/s/^/#/" $cronfile
             echo "$1 job is stopped!"
         fi;;
     --list)                  #查看jobname命令目前处于什么状态
