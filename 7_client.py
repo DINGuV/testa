@@ -1,5 +1,6 @@
 #客户控制端：利用socket模块实现数据的发送和接收
 
+
 import socket
 
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
