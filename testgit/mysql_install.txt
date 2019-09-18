@@ -1,0 +1,196 @@
+查看操作系统：
+# cat /etc/centos-release
+CentOS Linux release 7.5.1804 (Core) 
+--解压文件：
+tar -xvf mysql-8.0.12-1.el7.x86_64.rpm-bundle.tar
+可以看到解压后的文件有10个RPM包：
+mysql-community-client-8.0.12-1.el7.x86_64.rpm
+mysql-community-common-8.0.12-1.el7.x86_64.rpm
+mysql-community-devel-8.0.12-1.el7.x86_64.rpm
+mysql-community-embedded-compat-8.0.12-1.el7.x86_64.rpm
+mysql-community-libs-8.0.12-1.el7.x86_64.rpm
+mysql-community-libs-compat-8.0.12-1.el7.x86_64.rpm
+mysql-community-minimal-debuginfo-8.0.12-1.el7.x86_64.rpm
+mysql-community-server-8.0.12-1.el7.x86_64.rpm
+mysql-community-server-minimal-8.0.12-1.el7.x86_64.rpm
+mysql-community-test-8.0.12-1.el7.x86_64.rpm
+我们只需要依次安装需要的几个RPM包即可，安装之前需要卸载掉centos自带的mariadb-libs：
+rpm -e --nodeps mariadb-libs
+rpm -ivh mysql-community-common-8.0.12-1.el7.x86_64.rpm 
+rpm -ivh mysql-community-libs-8.0.12-1.el7.x86_64.rpm 
+rpm -ivh mysql-community-client-8.0.12-1.el7.x86_64.rpm 
+rpm -ivh mysql-community-server-8.0.12-1.el7.x86_64.rpm 
+ 
+#systemctl start mysqld
+#systemctl status mysqld
+● mysqld.service - MySQL Server
+   Loaded: loaded (/usr/lib/systemd/system/mysqld.service; enabled; vendor preset: disabled)
+   Active: active (running) since Sat 2018-07-28 22:55:26 CST; 41min ago
+     Docs: man:mysqld(8)
+           http://dev.mysql.com/doc/refman/en/using-systemd.html
+  Process: 3834 ExecStartPre=/usr/bin/mysqld_pre_systemd (code=exited, status=0/SUCCESS)
+ Main PID: 3902 (mysqld)
+   Status: "SERVER_OPERATING"
+   CGroup: /system.slice/mysqld.service
+           └─3902 /usr/sbin/mysqld
+ 
+Jul 28 22:55:22 node4.example.com systemd[1]: Starting MySQL Server...
+Jul 28 22:55:26 node4.example.com systemd[1]: Started MySQL Server.
+# systemctl enable mysqld  
+# systemctl list-unit-files | grep -i mysql
+mysqld.service                                enabled 
+mysqld@.service                               disabled
+ 
+--登录MySQL：
+由于RPM默认安装会找my.cnf去生产错误日志文件和数据文件，在MySQL5.7之后使用安全的安装方式会随机生产一个临时密码存放在错误日志文件中。
+# cat /etc/my.cnf | grep -v ^# 
+ 
+[mysqld]
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+ 
+# cat /var/log/mysqld.log  | grep -i temporary
+2018-07-28T14:55:23.475303Z 5 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: Tt8S./Tc;HuB
+ 输入随机产生的密码：
+# mysql -p -S /var/lib/mysql/mysql.sock
+Enter password: 
+ 
+登录之后需要修改密码并创建一个可以远程登录的用户：
+mysql> alter user root@'localhost' identified by 'oracle';
+ERROR 1819 (HY000): Your password does not satisfy the current policy requirements
+mysql> alter user root@'localhost' identified by 'oracle@2018';
+ERROR 1819 (HY000): Your password does not satisfy the current policy requirements
+mysql> alter user root@'localhost' identified by 'Oracle@2018';
+Query OK, 0 rows affected (0.11 sec)
+mysql> show variables like '%valid%';
++--------------------------------------+--------+
+| Variable_name                        | Value  |
++--------------------------------------+--------+
+| validate_password.check_user_name    | ON     |
+| validate_password.dictionary_file    |        |
+| validate_password.length             | 8      |
+| validate_password.mixed_case_count   | 1      |
+| validate_password.number_count       | 1      |
+| validate_password.policy             | MEDIUM |
+| validate_password.special_char_count | 1      |
++--------------------------------------+--------+
+7 rows in set (0.00 sec)
+可以看到自MySQL5.7以来的RPM安装后的密码强度至少一个大写字母+一个数字+一个特殊符号。
+使用传统语句创建远程登录的用户，可以看到MySQL8.0版本开始不支持传统的创建用户和授权写到一起的方法，需要将创建用户和授权分开：
+mysql> grant all privileges on *.* to root@'%' identified by 'Oracle@2018' with grant option;
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'identified by 'Oracle@2018' with grant option' at line 1
+mysql> create user root@'%' identified by 'Oracle@2018';
+Query OK, 0 rows affected (0.07 sec)
+mysql> grant all privileges on *.* to root@'%' with grant option;
+Query OK, 0 rows affected (0.06 sec)
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+查看错误日志的信息时候会发现时区和北京时间的时区不一致，相差八个小时，不太习惯于平常的日志查看：
+mysql> select now();
++---------------------+
+| now()               |
++---------------------+
+| 2018-07-28 23:07:03 |
++---------------------+
+1 row in set (0.00 sec)
+mysql> system cat /var/log/mysqld.log
+2018-07-28T14:55:22.384191Z 0 [System] [MY-013169] [Server] /usr/sbin/mysqld (mysqld 8.0.12) initializing of server in progress as process 3855
+2018-07-28T14:55:23.475303Z 5 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: Tt8S./Tc;HuB
+2018-07-28T14:55:24.124940Z 0 [System] [MY-013170] [Server] /usr/sbin/mysqld (mysqld 8.0.12) initializing of server has completed
+2018-07-28T14:55:26.149309Z 0 [System] [MY-010116] [Server] /usr/sbin/mysqld (mysqld 8.0.12) starting as process 3902
+2018-07-28T14:55:26.440808Z 0 [Warning] [MY-010068] [Server] CA certificate ca.pem is self signed.
+2018-07-28T14:55:26.458527Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.12'  socket: '/var/lib/mysql/mysql.sock'  port: 3306  MySQL Community Server - GPL.
+mysql> 
+ 
+此时需要参数为：
+mysql> set global log_timestamps=system;
+Query OK, 0 rows affected (0.00 sec)
+不过若要重启MySQL生效的话还需要写到配置文件my.cnf:
+若使用SQLyog等客户端登录MySQL会报错（MySQL workbench 8.0.12则不会报错）：
+error 2059: Authentication plugin 'caching_sha2_password' cannot be loaded
+解决办法为修改认证插件：
+mysql> select host,user,authentication_string ,plugin from mysql.user where user='root';
++-----------+------+------------------------------------------------------------------------+-----------------------+
+| host      | user | authentication_string                                                  | plugin                |
++-----------+------+------------------------------------------------------------------------+-----------------------+
+| %         | root | $A$005$z`}{.J~ht)Dv2M%o.i&2ZxkUAe8TuCngYYWT5qjGl8zPL1.1C3/f68wFeLycFB | caching_sha2_password |
+| localhost | root | $A$005$?yI;3Ws_ U!2lYXRno46hSXNTL9Hz7t.apqvDebR5kGvPprMDvH27z1 | caching_sha2_password |
++-----------+------+------------------------------------------------------------------------+-----------------------+
+2 rows in set (0.00 sec)
+mysql> alter user root@'%' identified  WITH mysql_native_password by 'Oracle@2018';
+Query OK, 0 rows affected (0.07 sec)
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+mysql> select host,user,authentication_string ,plugin from mysql.user where user='root';
++-----------+------+------------------------------------------------------------------------+-----------------------+
+| host      | user | authentication_string                                                  | plugin                |
++-----------+------+------------------------------------------------------------------------+-----------------------+
+| %         | root | *FFB4B151EBAD3082A29A4BED121A7F09718E934D                              | mysql_native_password |
+| localhost | root | $A$005$?yI;3Ws_ U!2lYXRno46hSXNTL9Hz7t.apqvDebR5kGvPprMDvH27z1 | caching_sha2_password |
++-----------+------+------------------------------------------------------------------------+-----------------------+
+2 rows in set (0.00 sec)
+若需要后续的新创建的用户默认使用mysql_native_password 还需要写入到参数文件。
+由于Linux系统默认是区分大小写的，在MYSQL中也是区分，为了便于平时的开发和书写需要修改参数以支持不区分大小写。
+所以my.cnf文件中至少需要加上如下配置，然后重启MySQL：
+[mysqld]
+log_timestamps                 = SYSTEM
+lower_case_table_names         = 1
+default-authentication-plugin  =mysql_native_password
+ 
+ 
+此时还会报错：
+[ERROR] [MY-011087] [Server] Different lower_case_table_names settings for server ('1') and data dictionary ('0').
+若要不区分大小写则在启动mysql之前将lower_case_table_names         = 1写入到配置文件或者
+需要删除datadir目录下的所有文件重新启动初始化数据文件。
+ 
+若要在8.0版本中关闭密码强度验证只需要卸载组件即可：
+mysql> UNINSTALL COMPONENT 'file://component_validate_password';
+Query OK, 0 rows affected (0.01 sec)
+mysql> show variables like 'valid%pass%';
+Empty set (0.00 sec)
+而在MySQL5.6 和5.7版本中则需要在my.cnf文件中写入：
+validate_password=OFF
+ 
+ 
+若不想使用RPM安装后的MySQL则可以卸载：
+# rpm -qa | grep -i mysql
+mysql-community-common-8.0.12-1.el7.x86_64
+mysql-community-client-8.0.12-1.el7.x86_64
+mysql-community-libs-8.0.12-1.el7.x86_64
+mysql-community-server-8.0.12-1.el7.x86_64
+# rpm -e --nodeps `rpm -qa | grep -i mysql`
+卸载之后删除数据目录文件和日志文件即可：
+# rm -rf /var/lib/mysql/*
+# rm -rf /var/log/mysqld.log
+
+
+创建用户(WITH mysql_native_password 是可选的，为了适应客户端兼容性)
+CREATE USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY '密码';
+设置/修改密码
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '密码';
+ALTER USER 'root'@'localhost' IDENTIFIED BY '密码';
+alter user 'yzd'@'%' identified by 'aaa';
+清除密码
+ALTER USER 'root'@'localhost' IDENTIFIED BY '';
+UPDATE user SET authentication_string='' WHERE user='root';
+删除用户
+drop user 用户名@localhost;
+Delete FROM mysql.user Where User="用户名" and Host=”localhost”;
+分配权限
+grant all privileges on *.* to root@'%';
+刷新权限
+flush privileges;
+创建数据库
+CREATE DATABASE IF NOT EXISTS yzd DEFAULT CHARSET utf8 COLLATE utf8_general_ci;
+查询数据库列表
+show databases;
+查询数据表列表
+show tables;
+查询用户列表
+select host,user,plugin,authentication_string from mysql.user;
+查询当前用户名
+select user();
+查询当前用户权限
+show grants;
