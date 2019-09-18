@@ -194,3 +194,4 @@ select host,user,plugin,authentication_string from mysql.user;
 select user();
 查询当前用户权限
 show grants;
+----end-----
