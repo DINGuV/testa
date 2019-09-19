@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#假设脚本在生成日志文件所在的目录执行
+#本脚本利用vmstat工具分析系统cpu的使用情况
+
+log_bak="./log_bak"
+if [! -d ${log_bak} ]   #创建日记文件备份目录
+then
+	mkdir ${log_bak}
+fi
+
+while :   #放入后台，不断循环执行
+do
+	sleep 30s    #设置时间间隔，扫描日志文件
+	timetag=$(date +"%R%S:%D")   #时间戳
+	filename=$(date +"%y%m%d")
+	cpuinfo=$(vmstat 1 1 | sed -n "3p" | awk '{printf "us:%d\tsy:%d\tid:%d\twa:%d\tst:%d\t\n",$13,$14,$15,$16,$17}')
+	#分析vmstat的显示模式，将需要的到的CPU信息：us、sy、id、wa、st利用awk格式输出
+	echo $timetag $cpuinfo >> cpu_info.log    #生成日志文件
+
+	i=`du -k cpu_info.log | awk '{print $1}'`   #计算日志文件大小
+
+	if [ $i -gt 300 ]     #超过某一个设定值时，将日志文件备份删除
+	then
+	mv cpu_info.log ${log_bak}/cpuinfo${filename}.log
+	rm cpu_info.log
+	fi
+done
+

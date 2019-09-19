@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#利用awk工具对ifconfig输出进行解析，匹配到ip地址后，输出对应的值;
+#awk命令部分在脚本中2_ifconfig_awk。
+#例：ifconfig | awk -f 2_ifconfig_awk
+
+BEGIN{
+	var["name"] = 0;
+	var["ip"] = 0;
+}
+{
+	name = $1;
+	ip = $2;
+	if( ip ~ /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/ ){
+		var["name"] = name;
+		var["ip"] = ip;
+        print "name =",var["name"],"ip =",ip;
+    }
+}
